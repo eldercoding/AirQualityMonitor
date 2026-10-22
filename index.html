@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="sr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 - PM Zagađenje Vazduha</title>
+    <!-- Tailwind CSS sa konfiguracijom za klasnu tamnu temu -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js za iscrtavanje grafikona -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 transition-colors duration-200">
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <!-- Zaglavlje sa dugmetom za Dark Mode -->
+        <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md transition-colors duration-200">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Monitoring Zagađenja</h1>
+                <p class="text-xs md:text-sm text-gray-500 dark:text-gray-400">ESP32-C3 senzor u realnom vremenu</p>
+            </div>
+            <button id="theme-toggle" class="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition focus:outline-none">
+                <!-- Ikonica (menja se preko JS) -->
+                <span id="theme-icon" class="text-xl">☀️</span>
+            </button>
+        </div>
+        
+        <!-- Sekcija: Poslednje merenje na vrhu -->
+        <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border-l-4 border-blue-500 dark:border-blue-400 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Poslednje merenje</h2>
+            <div id="latest-content" class="text-gray-500 dark:text-gray-400">Učitavanje podataka...</div>
+        </div>
+
+        <!-- Sekcija: Grafikon za ostale podatke -->
+        <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje zagađenja kroz vreme</h2>
+            <div class="relative h-80">
+                <canvas id="pollutionChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- VAŠI SUPABASE PODACI ---
+        const SUPABASE_URL = 'https://dlyfovkjrjndiddhcdad.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_IsHJi8QNueg8fBGdJn_xqw_1OH0mjbS';
+
+        // Inicijalizacija Supabase klijenta
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let myChart = null;
+        let globalData = [];
+
+        // --- UPRAVLJANJE TEMAČOM (DARK/LIGHT MODE) ---
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const htmlElement = document.documentElement;
+
+        // Inicijalno podešavanje ikonice na osnovu podrazumevanog stanja (dark je uključen)
+        updateThemeIcon();
+
+        themeToggleBtn.addEventListener('click', () => {
+            htmlElement.classList.toggle('dark');
+            updateThemeIcon();
+            // Osveži grafikon da preuzme odgovarajuće boje za tekst/ose
+            if (globalData.length > 0) {
+                renderChart(globalData);
+            }
+        });
+
+        function updateThemeIcon() {
+            if (htmlElement.classList.contains('dark')) {
+                themeIcon.textContent = '☀️'; // Kada je dark, nudimo prelazak na svetlo
+            } else {
+                themeIcon.textContent = '🌙'; // Kada je svetlo, nudimo prelazak na tamno
+            }
+        }
+
+        // --- PREUZIMANJE PODATAKA ---
+        async function fetchData() {
+            const { data, error } = await supabaseClient
+                .from('sensor_readings')
+                .select('*')
+                .order('measurement_time', { ascending: false })
+                .limit(30);
+
+            if (error) {
+                console.error('Greška pri preuzimanju:', error);
+                document.getElementById('latest-content').innerHTML = '<p class="text-red-500">Greška pri učitavanju podataka iz baze.</p>';
+                return;
+            }
+
+            if (!data || data.length === 0) {
+                document.getElementById('latest-content').innerHTML = '<p class="text-gray-500">Nema pronađenih merenja.</p>';
+                return;
+            }
+
+            globalData = data; // Čuvamo podatke globalno
+
+            // 1. Prikaz poslednjeg merenja
+            const latest = data[0];
+            const dateStr = latest.measurement_time 
+                ? new Date(latest.measurement_time).toLocaleString('sr-RS') 
+                : 'Nepoznato vreme';
+
+            document.getElementById('latest-content').innerHTML = `
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Vreme merenja: <span class="font-medium text-gray-800 dark:text-gray-200">${dateStr}</span></p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Senzor ID: <span class="font-medium text-gray-800 dark:text-gray-200">${latest.sensor_id || '-'}</span></p>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 w-full md:w-auto">
+                        <div class="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg text-center border dark:border-gray-600">
+                            <span class="block text-xs text-gray-500 dark:text-gray-400">PM 1.0</span>
+                            <span class="text-lg font-bold text-gray-800 dark:text-gray-100">${latest.pm1 ?? '-'}</span>
+                            <span class="text-xs text-gray-400">µg/m³</span>
+                        </div>
+                        <div class="bg-blue-50 dark:bg-blue-950/40 p-3 rounded-lg text-center border border-blue-200 dark:border-blue-800">
+                            <span class="block text-xs text-blue-600 dark:text-blue-400">PM 2.5</span>
+                            <span class="text-lg font-bold text-blue-600 dark:text-blue-400">${latest.pm2_5 ?? '-'}</span>
+                            <span class="text-xs text-blue-400/80">µg/m³</span>
+                        </div>
+                        <div class="bg-purple-50 dark:bg-purple-950/40 p-3 rounded-lg text-center border border-purple-200 dark:border-purple-800">
+                            <span class="block text-xs text-purple-600 dark:text-purple-400">PM 10</span>
+                            <span class="text-lg font-bold text-purple-600 dark:text-purple-400">${latest.pm10 ?? '-'}</span>
+                            <span class="text-xs text-purple-400/80">µg/m³</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 2. Iscrtavanje grafikona
+            renderChart(data);
+        }
+
+        // --- ISCRTAVANJE GRAFIKONA ---
+        function renderChart(data) {
+            const chartData = [...data].reverse();
+            const labels = chartData.map(row => {
+                const d = new Date(row.measurement_time);
+                return d.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }) + ' ' + d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit' });
+            });
+            const pm1Values = chartData.map(row => row.pm1);
+            const pm25Values = chartData.map(row => row.pm2_5);
+            const pm10Values = chartData.map(row => row.pm10);
+
+            const ctx = document.getElementById('pollutionChart').getContext('2d');
+            
+            if (myChart) {
+                myChart.destroy();
+            }
+
+            // Provera da li je trenutno uključen dark mode da prilagodimo boje teksta na grafikonu
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#9ca3af' : '#4b5563';
+            const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 1)';
+
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'PM 1.0',
+                            data: pm1Values,
+                            borderColor: isDark ? '#9ca3af' : '#6b7280',
+                            backgroundColor: isDark ? 'rgba(156, 163, 175, 0.1)' : 'rgba(107, 114, 128, 0.1)',
+                            tension: 0.3,
+                            hidden: true
+                        },
+                        {
+                            label: 'PM 2.5',
+                            data: pm25Values,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.3
+                        },
+                        {
+                            label: 'PM 10',
+                            data: pm10Values,
+                            borderColor: '#a855f7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: textColor
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor },
+                            title: {
+                                display: true,
+                                text: 'µg/m³',
+                                color: textColor
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Pokreni učitavanje
+        fetchData();
+
+        // Osvežavanje na svakih 30 sekundi
+        setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>
