@@ -15,6 +15,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Chart.js za iscrtavanje grafikona -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Adapter za datume (neophodan za vremensku osu) -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 transition-colors duration-200">
     <div class="max-w-4xl mx-auto space-y-6">
@@ -48,7 +50,7 @@
 
         <!-- Sekcija: Grafikon za zagađenje -->
         <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje zagađenja kroz vreme (Poslednje 2 nedelje)</h2>
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje zagađenja kroz vreme</h2>
             <div class="relative h-80">
                 <canvas id="pollutionChart"></canvas>
             </div>
@@ -56,7 +58,7 @@
 
         <!-- Sekcija: Grafikon za temperaturu -->
         <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje temperature kroz vreme (Poslednje 2 nedelje)</h2>
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje temperature kroz vreme</h2>
             <div class="relative h-80">
                 <canvas id="temperatureChart"></canvas>
             </div>
@@ -64,7 +66,7 @@
 
         <!-- Sekcija: Grafikon za pritisak -->
         <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje pritiska kroz vreme (Poslednje 2 nedelje)</h2>
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje pritiska kroz vreme</h2>
             <div class="relative h-80">
                 <canvas id="pressureChart"></canvas>
             </div>
@@ -109,14 +111,16 @@
 
         // --- PREUZIMANJE PODATAKA ---
         async function fetchData() {
-            const twoWeeksAgo = new Date();
-            twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
             const { data, error } = await supabaseClient
                 .from('sensor_readings')
                 .select('*')
-                .gte('measurement_time', twoWeeksAgo.toISOString())
+                .gte('measurement_time', oneWeekAgo.toISOString())
                 .order('measurement_time', { ascending: false });
+
+            const alertBanner = document.getElementById('alert-banner');
 
             if (error) {
                 console.error('Greška pri preuzimanju:', error);
@@ -125,90 +129,97 @@
             }
 
             if (!data || data.length === 0) {
-                document.getElementById('latest-content').innerHTML = '<p class="text-gray-500">Nema pronađenih merenja u poslednje dve nedelje.</p>';
+                document.getElementById('latest-content').innerHTML = '<p class="text-gray-500">Nema pronađenih merenja u poslednjoj nedelji.</p>';
+                alertBanner.classList.add('hidden');
+                globalData = [];
+                
+                if (pollutionChartInstance) { pollutionChartInstance.destroy(); pollutionChartInstance = null; }
+                if (temperatureChartInstance) { temperatureChartInstance.destroy(); temperatureChartInstance = null; }
+                if (pressureChartInstance) { pressureChartInstance.destroy(); pressureChartInstance = null; }
                 return;
             }
 
             globalData = data;
 
-            // 1. Provera da li je poslednje očitavanje starije od sat vremena
+            // 1. Provera starosti poslednjeg očitavanja
             const latest = data[0];
             const latestTime = new Date(latest.measurement_time).getTime();
             const now = new Date().getTime();
             const diffMs = now - latestTime;
             const diffHours = diffMs / (1000 * 60 * 60);
 
-            const alertBanner = document.getElementById('alert-banner');
             const alertText = document.getElementById('alert-text');
 
             if (diffHours > 1) {
                 alertBanner.classList.remove('hidden');
                 const hoursAgo = diffHours.toFixed(1);
-                alertText.textContent = `Poslednje očitavanje je napravljeno pre ${hoursAgo} sati (starije od 1 sat).`;
+                alertText.textContent = `Poslednje očitavanje je napravljeno pre ${hoursAgo} sati.`;
             } else {
                 alertBanner.classList.add('hidden');
             }
 
-            // 2. Prikaz poslednjeg merenja (sa ažuriranim bojama)
             const dateStr = latest.measurement_time 
                 ? new Date(latest.measurement_time).toLocaleString('sr-RS') 
                 : 'Nepoznato vreme';
 
-            document.getElementById('latest-content').innerHTML = `
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Vreme: <span class="font-medium text-gray-800 dark:text-gray-200">${dateStr}</span></p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Senzor: <span class="font-medium text-gray-800 dark:text-gray-200">${latest.sensor_id || '-'}</span></p>
+            // 2. Ako je prošlo više od 24 sata bez podataka, ne prikazujemo stare podatke kao aktivne
+            if (diffHours > 24) {
+                document.getElementById('latest-content').innerHTML = `
+                    <div class="text-center py-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                        <p class="text-amber-600 dark:text-amber-400 font-semibold mb-1">Nema merenja u poslednja 24 sata</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Poslednje zabeleženo očitavanje bilo je: ${dateStr} (pre ${diffHours.toFixed(1)} sati)</p>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 w-full md:w-auto">
-                        <div class="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg text-center border dark:border-gray-600">
-                            <span class="block text-xs text-gray-500 dark:text-gray-400">PM 1.0</span>
-                            <span class="text-lg font-bold text-gray-800 dark:text-gray-100">${latest.pm1 ?? '-'}</span>
-                            <span class="text-xs text-gray-400">µg/m³</span>
+                `;
+            } else {
+                document.getElementById('latest-content').innerHTML = `
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Vreme: <span class="font-medium text-gray-800 dark:text-gray-200">${dateStr}</span></p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Senzor: <span class="font-medium text-gray-800 dark:text-gray-200">${latest.sensor_id || '-'}</span></p>
                         </div>
-                        <!-- PM 2.5 u ljubičastoj boji -->
-                        <div class="bg-purple-50 dark:bg-purple-950/40 p-3 rounded-lg text-center border border-purple-200 dark:border-purple-800">
-                            <span class="block text-xs text-purple-600 dark:text-purple-400">PM 2.5</span>
-                            <span class="text-lg font-bold text-purple-600 dark:text-purple-400">${latest.pm2_5 ?? '-'}</span>
-                            <span class="text-xs text-purple-400/80">µg/m³</span>
-                        </div>
-                        <!-- PM 10 u žutoj boji -->
-                        <div class="bg-yellow-50 dark:bg-yellow-950/40 p-3 rounded-lg text-center border border-yellow-200 dark:border-yellow-800">
-                            <span class="block text-xs text-yellow-600 dark:text-yellow-400">PM 10</span>
-                            <span class="text-lg font-bold text-yellow-600 dark:text-yellow-400">${latest.pm10 ?? '-'}</span>
-                            <span class="text-xs text-yellow-400/80">µg/m³</span>
-                        </div>
-                        <!-- Temperatura u plavoj boji -->
-                        <div class="bg-blue-50 dark:bg-blue-950/40 p-3 rounded-lg text-center border border-blue-200 dark:border-blue-800">
-                            <span class="block text-xs text-blue-600 dark:text-blue-400">Temperatura</span>
-                            <span class="text-lg font-bold text-blue-600 dark:text-blue-400">${latest.temperature ?? '-'}</span>
-                            <span class="text-xs text-blue-400/80">°C</span>
-                        </div>
-                        <!-- Pritisak u zelenoj boji -->
-                        <div class="bg-green-50 dark:bg-green-950/40 p-3 rounded-lg text-center border border-green-200 dark:border-green-800">
-                            <span class="block text-xs text-green-600 dark:text-green-400">Pritisak</span>
-                            <span class="text-lg font-bold text-green-600 dark:text-green-400">${latest.pressure ?? '-'}</span>
-                            <span class="text-xs text-green-400/80">hPa</span>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 w-full md:w-auto">
+                            <div class="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg text-center border dark:border-gray-600">
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">PM 1.0</span>
+                                <span class="text-lg font-bold text-gray-800 dark:text-gray-100">${latest.pm1 ?? '-'}</span>
+                                <span class="text-xs text-gray-400">µg/m³</span>
+                            </div>
+                            <div class="bg-purple-50 dark:bg-purple-950/40 p-3 rounded-lg text-center border border-purple-200 dark:border-purple-800">
+                                <span class="block text-xs text-purple-600 dark:text-purple-400">PM 2.5</span>
+                                <span class="text-lg font-bold text-purple-600 dark:text-purple-400">${latest.pm2_5 ?? '-'}</span>
+                                <span class="text-xs text-purple-400/80">µg/m³</span>
+                            </div>
+                            <div class="bg-yellow-50 dark:bg-yellow-950/40 p-3 rounded-lg text-center border border-yellow-200 dark:border-yellow-800">
+                                <span class="block text-xs text-yellow-600 dark:text-yellow-400">PM 10</span>
+                                <span class="text-lg font-bold text-yellow-600 dark:text-yellow-400">${latest.pm10 ?? '-'}</span>
+                                <span class="text-xs text-yellow-400/80">µg/m³</span>
+                            </div>
+                            <div class="bg-blue-50 dark:bg-blue-950/40 p-3 rounded-lg text-center border border-blue-200 dark:border-blue-800">
+                                <span class="block text-xs text-blue-600 dark:text-blue-400">Temperatura</span>
+                                <span class="text-lg font-bold text-blue-600 dark:text-blue-400">${latest.temperature ?? '-'}</span>
+                                <span class="text-xs text-blue-400/80">°C</span>
+                            </div>
+                            <div class="bg-green-50 dark:bg-green-950/40 p-3 rounded-lg text-center border border-green-200 dark:border-green-800">
+                                <span class="block text-xs text-green-600 dark:text-green-400">Pritisak</span>
+                                <span class="text-lg font-bold text-green-600 dark:text-green-400">${latest.pressure ?? '-'}</span>
+                                <span class="text-xs text-green-400/80">hPa</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
 
-            // 3. Iscrtavanje svih grafikona
-            renderCharts(data);
+            // 3. Iscrtavanje svih grafikona sa vremenskom osom
+            renderCharts(data, oneWeekAgo);
         }
 
         // --- ISCRTAVANJE GRAFIKONA ---
-        function renderCharts(data) {
-            const chartData = [...data].reverse();
-            const labels = chartData.map(row => {
-                const d = new Date(row.measurement_time);
-                return d.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }) + ' ' + d.toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit' });
-            });
-
+        function renderCharts(data, oneWeekAgo) {
             const isDark = document.documentElement.classList.contains('dark');
             const textColor = isDark ? '#9ca3af' : '#4b5563';
             const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 1)';
+
+            const minTime = oneWeekAgo.toISOString();
+            const maxTime = new Date().toISOString();
 
             // 1. Grafik zagađenja
             const ctxPollution = document.getElementById('pollutionChart').getContext('2d');
@@ -217,26 +228,25 @@
             pollutionChartInstance = new Chart(ctxPollution, {
                 type: 'line',
                 data: {
-                    labels: labels,
                     datasets: [
                         {
                             label: 'PM 1.0',
-                            data: chartData.map(row => row.pm1),
+                            data: data.map(row => ({ x: row.measurement_time, y: row.pm1 })),
                             borderColor: isDark ? '#9ca3af' : '#6b7280',
                             backgroundColor: isDark ? 'rgba(156, 163, 175, 0.1)' : 'rgba(107, 114, 128, 0.1)',
                             tension: 0.3
                         },
                         {
                             label: 'PM 2.5',
-                            data: chartData.map(row => row.pm2_5),
-                            borderColor: '#a855f7', // Ljubičasta boja
+                            data: data.map(row => ({ x: row.measurement_time, y: row.pm2_5 })),
+                            borderColor: '#a855f7',
                             backgroundColor: 'rgba(168, 85, 247, 0.1)',
                             tension: 0.3
                         },
                         {
                             label: 'PM 10',
-                            data: chartData.map(row => row.pm10),
-                            borderColor: '#eab308', // Žuta boja
+                            data: data.map(row => ({ x: row.measurement_time, y: row.pm10 })),
+                            borderColor: '#eab308',
                             backgroundColor: 'rgba(234, 179, 8, 0.1)',
                             tension: 0.3
                         }
@@ -247,25 +257,35 @@
                     maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: textColor } } },
                     scales: {
-                        x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'dd.MM.yyyy HH:mm',
+                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.' }
+                            },
+                            min: minTime,
+                            max: maxTime,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
                         y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor }, title: { display: true, text: 'µg/m³', color: textColor } }
                     }
                 }
             });
 
-            // 2. Grafik temperature (Plava boja)
+            // 2. Grafik temperature
             const ctxTemp = document.getElementById('temperatureChart').getContext('2d');
             if (temperatureChartInstance) temperatureChartInstance.destroy();
 
             temperatureChartInstance = new Chart(ctxTemp, {
                 type: 'line',
                 data: {
-                    labels: labels,
                     datasets: [
                         {
                             label: 'Temperatura',
-                            data: chartData.map(row => row.temperature),
-                            borderColor: '#3b82f6', // Plava boja
+                            data: data.map(row => ({ x: row.measurement_time, y: row.temperature })),
+                            borderColor: '#3b82f6',
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
                             tension: 0.3
                         }
@@ -276,25 +296,35 @@
                     maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: textColor } } },
                     scales: {
-                        x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'dd.MM.yyyy HH:mm',
+                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.' }
+                            },
+                            min: minTime,
+                            max: maxTime,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
                         y: { ticks: { color: textColor }, grid: { color: gridColor }, title: { display: true, text: '°C', color: textColor } }
                     }
                 }
             });
 
-            // 3. Grafik pritiska (Zelena boja)
+            // 3. Grafik pritiska
             const ctxPressure = document.getElementById('pressureChart').getContext('2d');
             if (pressureChartInstance) pressureChartInstance.destroy();
 
             pressureChartInstance = new Chart(ctxPressure, {
                 type: 'line',
                 data: {
-                    labels: labels,
                     datasets: [
                         {
                             label: 'Pritisak',
-                            data: chartData.map(row => row.pressure),
-                            borderColor: '#22c55e', // Zelena boja
+                            data: data.map(row => ({ x: row.measurement_time, y: row.pressure })),
+                            borderColor: '#22c55e',
                             backgroundColor: 'rgba(34, 197, 94, 0.1)',
                             tension: 0.3
                         }
@@ -305,7 +335,18 @@
                     maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: textColor } } },
                     scales: {
-                        x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'dd.MM.yyyy HH:mm',
+                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.' }
+                            },
+                            min: minTime,
+                            max: maxTime,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
                         y: { ticks: { color: textColor }, grid: { color: gridColor }, title: { display: true, text: 'hPa', color: textColor } }
                     }
                 }
