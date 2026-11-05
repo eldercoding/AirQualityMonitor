@@ -44,7 +44,12 @@
         
         <!-- Sekcija: Poslednje merenje na vrhu -->
         <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border-blue-500 dark:border-blue-400 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Poslednje merenje</h2>
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200">Poslednje merenje: </h2>
+                    <span id="header-air-quality-badge" class="hidden"></span>
+                </div>
+            </div>
             <div id="latest-content" class="text-gray-500 dark:text-gray-400">Učitavanje podataka...</div>
         </div>
 
@@ -97,6 +102,18 @@
         let temperatureChartInstance = null;
         let pressureChartInstance = null;
         let globalData = [];
+
+        // --- POMOĆNA FUNKCIJA ZA KVALITET VAZDUHA NA OSNOVU PM 2.5 ---
+        function getAirQualityStatus(pm25, pm10) {
+            //pm25 = 77;
+            if (pm25 === null || pm25 === undefined || pm10 === null || pm10 === undefined) return { text: 'Nepoznato', class: '' };
+            if (pm25 <= 10 && pm10 <= 20) return { text: 'Odličan 😄', class: 'text-green-500' };
+            if (pm25 <= 20 && pm10 <= 40) return { text: 'Prihvatljiv 🙂', class: 'text-yellow-500' };
+            if (pm25 <= 25 && pm10 <= 50) return { text: 'Umeren 😐', class: 'text-orange-500' };
+            if (pm25 <= 50 && pm10 <= 100) return { text: 'Loš ☹️', class: 'text-red-500' };
+            if (pm25 <= 75 && pm10 <= 150) return { text: 'Veoma loš 😶', class: 'text-purple-600' };
+            return { text: 'Opasan 😵', class: 'text-red-900' };
+        }
 
         // --- UPRAVLJANJE TEMOM (DARK/LIGHT MODE) ---
         const themeToggleBtn = document.getElementById('theme-toggle');
@@ -181,16 +198,19 @@
                 .order('measurement_time', { ascending: false });
 
             const alertBanner = document.getElementById('alert-banner');
+            const headerBadge = document.getElementById('header-air-quality-badge');
 
             if (error) {
                 console.error('Greška pri preuzimanju:', error);
                 document.getElementById('latest-content').innerHTML = '<p class="text-red-500">Greška pri učitavanju podataka iz baze.</p>';
+                headerBadge.classList.add('hidden');
                 return;
             }
 
             if (!data || data.length === 0) {
                 document.getElementById('latest-content').innerHTML = '<p class="text-gray-500">Nema pronađenih merenja za izabrani period.</p>';
                 alertBanner.classList.add('hidden');
+                headerBadge.classList.add('hidden');
                 globalData = [];
                 
                 if (pollutionChartInstance) { pollutionChartInstance.destroy(); pollutionChartInstance = null; }
@@ -201,7 +221,7 @@
 
             globalData = data;
 
-            // 1. Provera starosti poslednjeg očitavanja (uvek se oslanjamo na najnoviji zapis u bazi, bez obzira na filter)
+            // 1. Provera starosti poslednjeg očitavanja
             const latest = data[0];
             const latestTime = new Date(latest.measurement_time).getTime();
             const now = new Date().getTime();
@@ -222,7 +242,19 @@
                 ? new Date(latest.measurement_time).toLocaleString('sr-RS') 
                 : 'Nepoznato vreme';
 
-            // 2. Prikaz poslednjeg merenja na vrhu
+            // Dobijanje statusa kvaliteta vazduha na osnovu pm2_5
+            const airQuality = getAirQualityStatus(latest.pm2_5, latest.pm10);
+
+            // Prikaz/popunjavanje bedža kvaliteta u zaglavlju pored naslova
+            if (diffHours > 24) {
+                headerBadge.classList.add('hidden');
+            } else {
+                headerBadge.className = `text-xl tracking-wider font-extrabold ${airQuality.class}`;
+                headerBadge.textContent = airQuality.text;
+                headerBadge.classList.remove('hidden');
+            }
+
+            // 2. Prikaz poslednjeg merenja na vrhu (bez oznake "Kvalitet")
             if (diffHours > 24) {
                 document.getElementById('latest-content').innerHTML = `
                     <div class="text-center py-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
@@ -234,31 +266,31 @@
                 document.getElementById('latest-content').innerHTML = `
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Vreme: <span class="font-medium text-gray-800 dark:text-gray-200">${dateStr}</span></p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Vreme: <span class="font-medium text-gray-800 dark:text-gray-200">${dateStr}</span></p>
                             <p class="text-sm text-gray-500 dark:text-gray-400">Senzor: <span class="font-medium text-gray-800 dark:text-gray-200">${latest.sensor_id || '-'}</span></p>
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 w-full md:w-auto">
-                            <div class="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg text-center border dark:border-gray-600">
+                            <div class="p-1 text-center">
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">PM 1.0</span>
                                 <span class="text-lg font-bold text-gray-800 dark:text-gray-100">${latest.pm1 ?? '-'}</span>
                                 <span class="text-xs text-gray-400">µg/m³</span>
                             </div>
-                            <div class="bg-purple-50 dark:bg-purple-950/40 p-3 rounded-lg text-center border border-purple-200 dark:border-purple-800">
+                            <div class="p-1 text-center">
                                 <span class="block text-xs text-purple-600 dark:text-purple-400">PM 2.5</span>
                                 <span class="text-lg font-bold text-purple-600 dark:text-purple-400">${latest.pm2_5 ?? '-'}</span>
                                 <span class="text-xs text-purple-400/80">µg/m³</span>
                             </div>
-                            <div class="bg-yellow-50 dark:bg-yellow-950/40 p-3 rounded-lg text-center border border-yellow-200 dark:border-yellow-800">
+                            <div class="p-1 text-center">
                                 <span class="block text-xs text-yellow-600 dark:text-yellow-400">PM 10</span>
                                 <span class="text-lg font-bold text-yellow-600 dark:text-yellow-400">${latest.pm10 ?? '-'}</span>
                                 <span class="text-xs text-yellow-400/80">µg/m³</span>
                             </div>
-                            <div class="bg-blue-50 dark:bg-blue-950/40 p-3 rounded-lg text-center border border-blue-200 dark:border-blue-800">
+                            <div class="p-1 text-center">
                                 <span class="block text-xs text-blue-600 dark:text-blue-400">Temperatura</span>
                                 <span class="text-lg font-bold text-blue-600 dark:text-blue-400">${latest.temperature ?? '-'}</span>
                                 <span class="text-xs text-blue-400/80">°C</span>
                             </div>
-                            <div class="bg-green-50 dark:bg-green-950/40 p-3 rounded-lg text-center border border-green-200 dark:border-green-800">
+                            <div class="p-1 text-center">
                                 <span class="block text-xs text-green-600 dark:text-green-400">Pritisak</span>
                                 <span class="text-lg font-bold text-green-600 dark:text-green-400">${latest.pressure ?? '-'}</span>
                                 <span class="text-xs text-green-400/80">hPa</span>
@@ -415,11 +447,8 @@
             });
         }
 
-        // Pokreni učitavanje
+        // Pokreni učitavanje jednom pri učitavanju stranice
         fetchData();
-
-        // Osvežavanje na svakih 30 sekundi
-        setInterval(fetchData, 30000);
     </script>
 </body>
 </html>
