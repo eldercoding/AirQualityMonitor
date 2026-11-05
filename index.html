@@ -48,6 +48,18 @@
             <div id="latest-content" class="text-gray-500 dark:text-gray-400">Učitavanje podataka...</div>
         </div>
 
+        <!-- Sekcija: Izbor vremenskog opsega za grafike -->
+        <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-4 border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 transition-colors duration-200">
+            <span class="font-semibold text-gray-700 dark:text-gray-200">Vremenski opseg grafikona:</span>
+            <select id="timeRange" class="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                <option value="6h" selected>Poslednjih 6 sati</option>
+                <option value="1d">Poslednji dan</option>
+                <option value="1w">Poslednja nedelja</option>
+                <option value="1m">Poslednji mesec</option>
+                <option value="1y">Poslednja godina</option>
+            </select>
+        </div>
+
         <!-- Sekcija: Grafikon za zagađenje -->
         <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700 transition-colors duration-200">
             <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Kretanje zagađenja kroz vreme</h2>
@@ -90,6 +102,7 @@
         const themeToggleBtn = document.getElementById('theme-toggle');
         const themeIcon = document.getElementById('theme-icon');
         const htmlElement = document.documentElement;
+        const timeRangeSelect = document.getElementById('timeRange');
 
         updateThemeIcon();
 
@@ -97,8 +110,13 @@
             htmlElement.classList.toggle('dark');
             updateThemeIcon();
             if (globalData.length > 0) {
-                renderCharts(globalData);
+                const range = timeRangeSelect.value;
+                renderCharts(globalData, getStartDate(range), range);
             }
+        });
+
+        timeRangeSelect.addEventListener('change', () => {
+            fetchData();
         });
 
         function updateThemeIcon() {
@@ -109,15 +127,57 @@
             }
         }
 
+        // Izračunavanje početnog datuma na osnovu izabranog opsega
+        function getStartDate(range) {
+            const now = new Date();
+            switch (range) {
+                case '6h':
+                    return new Date(now.getTime() - 6 * 60 * 60 * 1000);
+                case '1d':
+                    return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                case '1w':
+                    return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                case '1m':
+                    return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                case '1y':
+                    return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                default:
+                    return new Date(now.getTime() - 6 * 60 * 60 * 1000);
+            }
+        }
+
+        // Funkcija za proređivanje podataka (downsampling) da grafi ostanu pregledni
+        function downsampleData(data, maxPoints = 200) {
+            if (data.length <= maxPoints) return data;
+            const factor = Math.ceil(data.length / maxPoints);
+            return data.filter((_, index) => index % factor === 0);
+        }
+
+        // Određivanje vremenske jedinice za osu X na osnovu opsega
+        function getTimeUnit(range) {
+            switch (range) {
+                case '6h':
+                case '1d':
+                    return 'hour';
+                case '1w':
+                case '1m':
+                    return 'day';
+                case '1y':
+                    return 'month';
+                default:
+                    return 'day';
+            }
+        }
+
         // --- PREUZIMANJE PODATAKA ---
         async function fetchData() {
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            const selectedRange = timeRangeSelect.value;
+            const startDate = getStartDate(selectedRange);
 
             const { data, error } = await supabaseClient
                 .from('sensor_readings')
                 .select('*')
-                .gte('measurement_time', oneWeekAgo.toISOString())
+                .gte('measurement_time', startDate.toISOString())
                 .order('measurement_time', { ascending: false });
 
             const alertBanner = document.getElementById('alert-banner');
@@ -129,7 +189,7 @@
             }
 
             if (!data || data.length === 0) {
-                document.getElementById('latest-content').innerHTML = '<p class="text-gray-500">Nema pronađenih merenja u poslednjoj nedelji.</p>';
+                document.getElementById('latest-content').innerHTML = '<p class="text-gray-500">Nema pronađenih merenja za izabrani period.</p>';
                 alertBanner.classList.add('hidden');
                 globalData = [];
                 
@@ -141,7 +201,7 @@
 
             globalData = data;
 
-            // 1. Provera starosti poslednjeg očitavanja
+            // 1. Provera starosti poslednjeg očitavanja (uvek se oslanjamo na najnoviji zapis u bazi, bez obzira na filter)
             const latest = data[0];
             const latestTime = new Date(latest.measurement_time).getTime();
             const now = new Date().getTime();
@@ -162,7 +222,7 @@
                 ? new Date(latest.measurement_time).toLocaleString('sr-RS') 
                 : 'Nepoznato vreme';
 
-            // 2. Ako je prošlo više od 24 sata bez podataka, ne prikazujemo stare podatke kao aktivne
+            // 2. Prikaz poslednjeg merenja na vrhu
             if (diffHours > 24) {
                 document.getElementById('latest-content').innerHTML = `
                     <div class="text-center py-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
@@ -208,18 +268,20 @@
                 `;
             }
 
-            // 3. Iscrtavanje svih grafikona sa vremenskom osom
-            renderCharts(data, oneWeekAgo);
+            // 3. Primena downsampling-a i iscrtavanje grafikona
+            const processedData = downsampleData(data);
+            renderCharts(processedData, startDate, selectedRange);
         }
 
         // --- ISCRTAVANJE GRAFIKONA ---
-        function renderCharts(data, oneWeekAgo) {
+        function renderCharts(data, startDate, range) {
             const isDark = document.documentElement.classList.contains('dark');
             const textColor = isDark ? '#9ca3af' : '#4b5563';
             const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 1)';
 
-            const minTime = oneWeekAgo.toISOString();
+            const minTime = startDate.toISOString();
             const maxTime = new Date().toISOString();
+            const timeUnit = getTimeUnit(range);
 
             // 1. Grafik zagađenja
             const ctxPollution = document.getElementById('pollutionChart').getContext('2d');
@@ -260,9 +322,9 @@
                         x: {
                             type: 'time',
                             time: {
-                                unit: 'day',
+                                unit: timeUnit,
                                 tooltipFormat: 'dd.MM.yyyy HH:mm',
-                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.' }
+                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.', month: 'MMM yyyy' }
                             },
                             min: minTime,
                             max: maxTime,
@@ -299,9 +361,9 @@
                         x: {
                             type: 'time',
                             time: {
-                                unit: 'day',
+                                unit: timeUnit,
                                 tooltipFormat: 'dd.MM.yyyy HH:mm',
-                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.' }
+                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.', month: 'MMM yyyy' }
                             },
                             min: minTime,
                             max: maxTime,
@@ -338,9 +400,9 @@
                         x: {
                             type: 'time',
                             time: {
-                                unit: 'day',
+                                unit: timeUnit,
                                 tooltipFormat: 'dd.MM.yyyy HH:mm',
-                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.' }
+                                displayFormats: { hour: 'HH:mm', day: 'dd.MM.', month: 'MMM yyyy' }
                             },
                             min: minTime,
                             max: maxTime,
