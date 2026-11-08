@@ -1,9 +1,17 @@
 <!DOCTYPE html>
-<html lang="sr" class="dark">
+<html lang="sr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitoring Vazduha</title>
+    <!-- Skripta za automatsku detekciju OS podešavanja i sprečavanje "bljeska" pri učitavanju -->
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
     <!-- Tailwind CSS sa konfiguracijom za klasnu tamnu temu -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -105,7 +113,6 @@
 
         // --- POMOĆNA FUNKCIJA ZA KVALITET VAZDUHA NA OSNOVU PM 2.5 ---
         function getAirQualityStatus(pm25, pm10) {
-            //pm25 = 77;
             if (pm25 === null || pm25 === undefined || pm10 === null || pm10 === undefined) return { text: 'Nepoznato', class: '' };
             if (pm25 <= 10 && pm10 <= 20) return { text: 'Odličan 😄', class: 'text-green-500' };
             if (pm25 <= 20 && pm10 <= 40) return { text: 'Prihvatljiv 🙂', class: 'text-yellow-500' };
@@ -125,10 +132,31 @@
 
         themeToggleBtn.addEventListener('click', () => {
             htmlElement.classList.toggle('dark');
+            const isDark = htmlElement.classList.contains('dark');
+            
+            // Sačuvaj izbor korisnika da bi ručna izmena imala prednost
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            
             updateThemeIcon();
             if (globalData.length > 0) {
                 const range = timeRangeSelect.value;
                 renderCharts(globalData, getStartDate(range), range);
+            }
+        });
+
+        // Automatsko praćenje ukoliko korisnik promeni podešavanja sistema, a nema ručni uneti izbor
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (!localStorage.getItem('theme')) {
+                if (e.matches) {
+                    htmlElement.classList.add('dark');
+                } else {
+                    htmlElement.classList.remove('dark');
+                }
+                updateThemeIcon();
+                if (globalData.length > 0) {
+                    const range = timeRangeSelect.value;
+                    renderCharts(globalData, getStartDate(range), range);
+                }
             }
         });
 
