@@ -29,13 +29,13 @@
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans p-6 transition-colors duration-200">
     <div class="max-w-4xl mx-auto space-y-6">
         
-        <!-- Zaglavlje sa dugmetom za Dark Mode -->
+        <!-- Zaglavlje sa dugmetom za Podešavanja -->
         <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 border-gray-100 shadow-md transition-colors duration-200">
             <div>
                 <h1 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Monitoring Vazduha</h1>
             </div>
-            <button id="theme-toggle" class="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition focus:outline-none">
-                <span id="theme-icon" class="text-xl">☀️</span>
+            <button id="settings-btn" class="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition focus:outline-none flex items-center gap-2" title="Podešavanja">
+                <span class="text-xl">⚙️</span>
             </button>
         </div>
 
@@ -59,18 +59,6 @@
                 </div>
             </div>
             <div id="latest-content" class="text-gray-500 dark:text-gray-400">Učitavanje podataka...</div>
-        </div>
-
-        <!-- Sekcija: Izbor vremenskog opsega za grafike -->
-        <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-4 border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 transition-colors duration-200">
-            <span class="font-semibold text-gray-700 dark:text-gray-200">Vremenski opseg grafikona:</span>
-            <select id="timeRange" class="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
-                <option value="6h" selected>Poslednjih 6 sati</option>
-                <option value="1d">Poslednji dan</option>
-                <option value="1w">Poslednja nedelja</option>
-                <option value="1m">Poslednji mesec</option>
-                <option value="1y">Poslednja godina</option>
-            </select>
         </div>
 
         <!-- Sekcija: Grafikon za zagađenje -->
@@ -98,6 +86,51 @@
         </div>
     </div>
 
+    <!-- Settings Modal Panel -->
+    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-6 m-4 border border-gray-100 dark:border-gray-700 transition-colors duration-200 space-y-6">
+            <div class="flex justify-between items-center border-b pb-4 dark:border-gray-700">
+                <h2 class="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2"><span>⚙️</span> Podešavanja</h2>
+                <button id="close-settings-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl font-bold focus:outline-none">&times;</button>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- Tema -->
+                <div class="flex justify-between items-center">
+                    <span class="font-medium text-gray-700 dark:text-gray-200">Tema</span>
+                    <button id="theme-toggle" class="px-3.5 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition flex items-center gap-2 text-sm font-medium">
+                        <span id="theme-icon" class="text-base">☀️</span>
+                        <span id="theme-text">Svetla tema</span>
+                    </button>
+                </div>
+
+                <!-- Auto refresh -->
+                <div class="flex justify-between items-center">
+                    <div>
+                        <span class="font-medium text-gray-700 dark:text-gray-200 block">Automatsko osvežavanje</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">Osveži podatke na svakih 15 minuta</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="auto-refresh-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                <!-- Vremenski opseg grafikona (Dugmići) -->
+                <div class="space-y-2">
+                    <span class="font-medium text-gray-700 dark:text-gray-200 block">Vremenski opseg grafikona</span>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="time-range-buttons">
+                        <button data-range="6h" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-blue-600 text-white border-blue-600 shadow-sm">Poslednjih 6 sati</button>
+                        <button data-range="1d" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednji dan</button>
+                        <button data-range="1w" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednja nedelja</button>
+                        <button data-range="1m" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednji mesec</button>
+                        <button data-range="1y" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednja godina</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- VAŠI SUPABASE PODACI ---
         const SUPABASE_URL = 'https://dlyfovkjrjndiddhcdad.supabase.co';
@@ -110,6 +143,8 @@
         let temperatureChartInstance = null;
         let pressureChartInstance = null;
         let globalData = [];
+        let currentTimeRange = '6h';
+        let autoRefreshInterval = null;
 
         // --- POMOĆNA FUNKCIJA ZA KVALITET VAZDUHA NA OSNOVU PM 2.5 ---
         function getAirQualityStatus(pm25, pm10) {
@@ -122,29 +157,45 @@
             return { text: 'Opasan 😵', class: 'text-red-900' };
         }
 
+        // --- UPRAVLJANJE PANELOM PODEŠAVANJA ---
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.classList.remove('hidden');
+        });
+
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.classList.add('hidden');
+            }
+        });
+
         // --- UPRAVLJANJE TEMOM (DARK/LIGHT MODE) ---
         const themeToggleBtn = document.getElementById('theme-toggle');
         const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
         const htmlElement = document.documentElement;
-        const timeRangeSelect = document.getElementById('timeRange');
 
-        updateThemeIcon();
+        updateThemeUI();
 
         themeToggleBtn.addEventListener('click', () => {
             htmlElement.classList.toggle('dark');
             const isDark = htmlElement.classList.contains('dark');
             
-            // Sačuvaj izbor korisnika da bi ručna izmena imala prednost
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             
-            updateThemeIcon();
+            updateThemeUI();
             if (globalData.length > 0) {
-                const range = timeRangeSelect.value;
-                renderCharts(globalData, getStartDate(range), range);
+                renderCharts(globalData, getStartDate(currentTimeRange), currentTimeRange);
             }
         });
 
-        // Automatsko praćenje ukoliko korisnik promeni podešavanja sistema, a nema ručni uneti izbor
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
             if (!localStorage.getItem('theme')) {
                 if (e.matches) {
@@ -152,25 +203,61 @@
                 } else {
                     htmlElement.classList.remove('dark');
                 }
-                updateThemeIcon();
+                updateThemeUI();
                 if (globalData.length > 0) {
-                    const range = timeRangeSelect.value;
-                    renderCharts(globalData, getStartDate(range), range);
+                    renderCharts(globalData, getStartDate(currentTimeRange), currentTimeRange);
                 }
             }
         });
 
-        timeRangeSelect.addEventListener('change', () => {
-            fetchData();
-        });
-
-        function updateThemeIcon() {
+        function updateThemeUI() {
             if (htmlElement.classList.contains('dark')) {
                 themeIcon.textContent = '☀️';
+                themeText.textContent = 'Svetla tema';
             } else {
                 themeIcon.textContent = '🌙';
+                themeText.textContent = 'Tamna tema';
             }
         }
+
+        // --- UPRAVLJANJE VREMENSKIM OPSEGOM (DUGMIĆI) ---
+        const timeBtns = document.querySelectorAll('.time-btn');
+
+        timeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                timeBtns.forEach(b => {
+                    b.className = 'time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600';
+                });
+                btn.className = 'time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-blue-600 text-white border-blue-600 shadow-sm';
+                currentTimeRange = btn.getAttribute('data-range');
+                fetchData();
+            });
+        });
+
+        // --- AUTOMATSKO OSVEŽAVANJE (15 MINUTA) ---
+        const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
+        const savedAutoRefresh = localStorage.getItem('autoRefresh') === 'true';
+        autoRefreshToggle.checked = savedAutoRefresh;
+
+        function handleAutoRefresh(isEnabled) {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+            if (isEnabled) {
+                autoRefreshInterval = setInterval(() => {
+                    fetchData();
+                }, 15 * 60 * 1000); // 15 minuta u milisekundama
+            }
+        }
+
+        handleAutoRefresh(savedAutoRefresh);
+
+        autoRefreshToggle.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            localStorage.setItem('autoRefresh', isChecked);
+            handleAutoRefresh(isChecked);
+        });
 
         // Izračunavanje početnog datuma na osnovu izabranog opsega
         function getStartDate(range) {
@@ -216,8 +303,7 @@
 
         // --- PREUZIMANJE PODATAKA ---
         async function fetchData() {
-            const selectedRange = timeRangeSelect.value;
-            const startDate = getStartDate(selectedRange);
+            const startDate = getStartDate(currentTimeRange);
 
             const { data, error } = await supabaseClient
                 .from('sensor_readings')
@@ -270,10 +356,8 @@
                 ? new Date(latest.measurement_time).toLocaleString('sr-RS') 
                 : 'Nepoznato vreme';
 
-            // Dobijanje statusa kvaliteta vazduha na osnovu pm2_5
             const airQuality = getAirQualityStatus(latest.pm2_5, latest.pm10);
 
-            // Prikaz/popunjavanje bedža kvaliteta u zaglavlju pored naslova
             if (diffHours > 24) {
                 headerBadge.classList.add('hidden');
             } else {
@@ -282,7 +366,7 @@
                 headerBadge.classList.remove('hidden');
             }
 
-            // 2. Prikaz poslednjeg merenja na vrhu (bez oznake "Kvalitet")
+            // 2. Prikaz poslednjeg merenja na vrhu
             if (diffHours > 24) {
                 document.getElementById('latest-content').innerHTML = `
                     <div class="text-center py-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
@@ -330,7 +414,7 @@
 
             // 3. Primena downsampling-a i iscrtavanje grafikona
             const processedData = downsampleData(data);
-            renderCharts(processedData, startDate, selectedRange);
+            renderCharts(processedData, startDate, currentTimeRange);
         }
 
         // --- ISCRTAVANJE GRAFIKONA ---
