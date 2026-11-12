@@ -120,11 +120,11 @@
                 <div class="space-y-2">
                     <span class="font-medium text-gray-700 dark:text-gray-200 block">Vremenski opseg grafikona</span>
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="time-range-buttons">
-                        <button data-range="6h" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-blue-600 text-white border-blue-600 shadow-sm">Poslednjih 6 sati</button>
-                        <button data-range="1d" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednji dan</button>
-                        <button data-range="1w" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednja nedelja</button>
-                        <button data-range="1m" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednji mesec</button>
-                        <button data-range="1y" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Poslednja godina</button>
+                        <button data-range="6h" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">6 sati</button>
+                        <button data-range="1d" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Dan</button>
+                        <button data-range="1w" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Nedelja</button>
+                        <button data-range="1m" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Mesec</button>
+                        <button data-range="1y" class="time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">Godina</button>
                     </div>
                 </div>
             </div>
@@ -223,6 +223,17 @@
         // --- UPRAVLJANJE VREMENSKIM OPSEGOM (DUGMIĆI) ---
         const timeBtns = document.querySelectorAll('.time-btn');
 
+        const timeRange = localStorage.getItem('timeRange');
+        if(timeRange) {
+            currentTimeRange = timeRange;
+
+        }
+
+        const activeTimeBtn = document.querySelector(`.time-btn[data-range="${currentTimeRange}"]`);
+        if (activeTimeBtn) {
+            activeTimeBtn.className = 'time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-blue-600 text-white border-blue-600 shadow-sm';
+        }
+
         timeBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 timeBtns.forEach(b => {
@@ -230,6 +241,7 @@
                 });
                 btn.className = 'time-btn px-3 py-2 text-xs font-semibold rounded-lg border transition bg-blue-600 text-white border-blue-600 shadow-sm';
                 currentTimeRange = btn.getAttribute('data-range');
+                localStorage.setItem('timeRange', currentTimeRange);
                 fetchData();
             });
         });
